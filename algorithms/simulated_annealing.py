@@ -6,24 +6,12 @@ A metaheuristic optimizer that mimics annealing in metallurgy:
 • Gradually cools according to a chosen schedule to focus on exploitation.
 • Tracks and returns the best solution found.
 
-Cooling Schedules Supported:
+Cooling Schedules :
   • linear      : T(k) = T0 − α·k
   • logarithmic : T(k) = T0 / log(k+1)
   • exponential : T(k) = T0 · β^k
   • adaptive    : adjust cooling based on recent acceptance rate
   • custom      : user-provided schedule function
-
-Usage:
-  sa = SimulatedAnnealing(
-      objective=rastrigin_obj,
-      initial_temp=100,
-      schedule='exponential',
-      schedule_params={'beta': 0.99},
-      step_size=0.5,
-      max_iter=10000
-  )
-  best_x, best_f = sa.run()
-  summary = sa.summary()
 """
 
 import numpy as np
@@ -69,16 +57,10 @@ class SimulatedAnnealing:
         self.temps = []
         self.total_time = 0
 
-        # For adaptive schedule
-        if schedule == 'adaptive':
-            cfg = self.params
-            self.window = cfg.get('window', max_iter // 10)
-            self.target_rate = cfg.get('rate_target', 0.2)
-            self.alpha_fast = cfg.get('alpha_fast', 0.99)
-            self.alpha_slow = cfg.get('alpha_slow', 0.999)
-            self.accept_history = []
+        # Solution acceptance history
+        self.accept_history = []
 
-    def _schedule_temp(self, k, T_prev):
+    def _schedule_temp(self, k, t_prev):
         """Compute temperature at iteration k based on selected schedule."""
         if self.schedule == 'linear':
             alpha = self.params.get('alpha', self.T0 / self.max_iter)
@@ -89,44 +71,58 @@ class SimulatedAnnealing:
             beta = self.params.get('beta', 0.99)
             return self.T0 * (beta ** k)
         elif self.schedule == 'adaptive':
-            # adjust alpha based on recent acceptance rate
-            if k > 0 and len(self.accept_history) >= self.window:
-                recent = self.accept_history[-self.window:]
-                rate = sum(recent) / len(recent)
-                # if we're accepting too many, cool faster; if too few, cool slower
-                factor = self.alpha_fast if rate > self.target_rate else self.alpha_slow
-                return T_prev * factor
-            return T_prev * self.alpha_slow
+            return self._adaptive_temp(k, t_prev)
         elif self.schedule == 'custom':
-            func = self.params.get('func')
-            if not callable(func):
-                raise ValueError("Custom schedule requires a 'func' parameter.")
-            return func(k, T_prev)
+            return self._piecewise_temp(k)
         else:
             raise ValueError(f"Unknown schedule '{self.schedule}'")
 
-    def _perturb(self, x):
+    def _generate_neighbour(self, x):
         """Generate a Gaussian‐noisy neighbor clipped to bounds."""
         candidate = x + np.random.normal(0, self.step_size, self.dim)
         low, high = self.obj.bounds
         return np.clip(candidate, low, high)
 
+    def _piecewise_temp(self, k):
+        switch_point = self.params.get('switch_point', k / 2)
+        alpha = self.params.get('alpha', 0.01)
+        beta = self.params.get('beta', 0.95)
+        if k < switch_point:
+            return self.T0 / (1 + alpha * k)
+        else:
+            return self.T0 * (beta ** (k - switch_point))
+
+    def _adaptive_temp(self, k, t_prev):
+        window = self.params.get('window', 50)
+        target_rate = self.params.get('rate_target', 0.4)
+        alpha_fast = self.params.get('alpha_fast', 0.95)
+        alpha_slow = self.params.get('alpha_slow', 0.99)
+
+        """Adaptive temperature adjustment based on recent acceptance rate."""
+        if k > 0 and len(self.accept_history) >= window:
+            recent = self.accept_history[-window:]
+            rate = sum(recent) / len(recent)
+            # Adjust cooling speed based on whether we're accepting too many or too few
+            factor = alpha_fast if rate > target_rate else alpha_slow
+            return t_prev * factor
+        return t_prev * alpha_slow
+
     def run(self):
         """Perform the simulated annealing search over max_iter steps."""
         start = time.perf_counter()
         # Initialize with noise near global min
-        self.current_solution = self._perturb(self.obj.global_min)
+        self.current_solution = self._generate_neighbour(self.obj.global_min)
         self.current_eval = self.obj.evaluate(self.current_solution)
         self.best_solution = self.current_solution.copy()
         self.best_eval = self.current_eval
-        T = self.T0
+        temperature = self.T0
 
         for k in range(self.max_iter):
-            # Cooling: safely clamp temperature to avoid zero or negative
-            T = max(self._schedule_temp(k, T), 1e-8)
+            # Clamp temperature to avoid zero or negative values
+            temperature = max(self._schedule_temp(k, temperature), 1e-8)
 
             # Generate neighbor and evaluate
-            neighbor = self._perturb(self.current_solution)
+            neighbor = self._generate_neighbour(self.current_solution)
             neigh_eval = self.obj.evaluate(neighbor)
 
             # Compute change in energy
@@ -137,7 +133,8 @@ class SimulatedAnnealing:
                 accept = True
             else:
                 try:
-                    accept_prob = np.exp(-min(delta / T, 700))  # avoid overflow
+                # Compute Metropolis acceptance probability; cap exponent to avoid overflow
+                    accept_prob = np.exp(-min(delta / temperature, 700))  # avoid overflow
                     accept = np.random.rand() < accept_prob
                 except FloatingPointError:
                     accept = False
@@ -155,9 +152,8 @@ class SimulatedAnnealing:
 
             # Logging
             self.history.append(self.current_eval)
-            self.temps.append(T)
-            if self.schedule == 'adaptive':
-                self.accept_history.append(accepted)
+            self.temps.append(temperature)
+            self.accept_history.append(accepted)
 
         self.total_time = time.perf_counter() - start
         return self.best_solution, self.best_eval
