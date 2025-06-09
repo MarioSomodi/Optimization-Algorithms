@@ -17,7 +17,7 @@ import time
 class HillClimber:
     def __init__(self, objective, step_size=0.1, max_iter=1000, local_search_iter=500):
         """
-        objective an object with .bounds (low,high) and .evaluate(x) methods
+        objective function object with .bounds (low,high) and .evaluate(x) methods
         step_size standard deviation of normal distribution values
         max_iter how many restarts to run
         local_search_iter how many steps per local search
@@ -82,7 +82,7 @@ class HillClimber:
 
     def summary(self):
         """
-        Return a dictionary with:
+        Return
           • best_solution the best point found
           • best_evaluation its score
           • total_time full run duration
