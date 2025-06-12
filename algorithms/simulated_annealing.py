@@ -78,7 +78,7 @@ class SimulatedAnnealing:
             raise ValueError(f"Unknown schedule '{self.schedule}'")
 
     def _generate_neighbour(self, x):
-        """Generate a Gaussian‐noisy neighbor clipped to bounds."""
+        """Generate a normal distribution neighbor clipped to bounds."""
         candidate = x + np.random.normal(0, self.step_size, self.dim)
         low, high = self.obj.bounds
         return np.clip(candidate, low, high)

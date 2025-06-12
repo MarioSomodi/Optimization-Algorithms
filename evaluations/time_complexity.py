@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from matplotlib import pyplot as plt
 
 """
 evaluate_time_complexity
@@ -52,9 +53,6 @@ def evaluate_time_complexity(algo, objective_class, config, runs=6,
         total_times.append(summary['total_time'])
         mn_product.append(max_iter * local_iter)
 
-    
-    print("outer_times:", outer_times)
-    print("local_times:", local_times)
     raw_data = {
         'max_iters': max_iters,
         'local_iters': local_iters,
@@ -73,3 +71,38 @@ def evaluate_time_complexity(algo, objective_class, config, runs=6,
     })
 
     return raw_data, df
+
+def plot_runtime_analysis_inline(mn_product, total_times):
+    """
+    Plot two graphs:
+    1. Total time vs. total function evaluations (m·n), which reflects empirical time complexity.
+    2. Growth rate of time per evaluation, to analyze if cost per step increases.
+
+    Inputs:
+    - mn_product: list of m·n values where:
+        m = max_iter (max iter)
+        n = local_iter (local search iter)
+    - total_times: corresponding total run times for each m·n point
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Shows how runtime grows with number of function evaluations
+    axes[0].plot(mn_product, total_times, color='r', marker='o', markersize='2', label='Total Time (s)')
+    axes[0].set_title("Total Time vs. m·n")
+    axes[0].set_xlabel("m·n (Function Evaluations)")
+    axes[0].set_ylabel("Total Time (s)")
+    axes[0].legend()
+    axes[0].grid(True)
+
+    # how much time increases per additional evaluation
+    growth_rates = [(total_times[i] - total_times[i-1]) / (mn_product[i] - mn_product[i-1])
+                    for i in range(1, len(total_times))]
+    axes[1].plot(mn_product[1:], growth_rates, color='r', marker='o', markersize='2', label='Growth Rate (s per eval)')
+    axes[1].set_title("Growth Rate of Runtime per Evaluation")
+    axes[1].set_xlabel("m·n (Function Evaluations)")
+    axes[1].set_ylabel("Growth Rate (s per eval)")
+    axes[1].legend()
+    axes[1].grid(True)
+
+    plt.tight_layout()
+    plt.show()
