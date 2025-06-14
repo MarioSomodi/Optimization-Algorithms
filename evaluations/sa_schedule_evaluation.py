@@ -16,11 +16,10 @@ def run_experiment():
         },
         'custom': {'alpha': 0.01, 'beta': 0.95, 'switch_point': 150}
     }
-
-    runs = 50
-    max_iter = 5000
+    runs = 100
+    max_iter = 10000
     tol = 1.0
-    dim = 2
+    dim = 8
     init_temp = 100000
     step_size = 0.1
     results = {}
