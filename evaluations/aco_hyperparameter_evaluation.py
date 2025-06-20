@@ -1,21 +1,48 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 from algorithms.ant_colony_optimization import AntColonyOptimization
+
 
 def create_distance_matrix(n_cities, seed=None):
     """
     Generate a random symmetric distance matrix for n_cities in 2D.
-
-    Returns:
-        distance_matrix (np.ndarray): Pairwise Euclidean distances.
-        coords (np.ndarray): Coordinates of each city.
     """
     rng = np.random.RandomState(seed)
     coords = rng.rand(n_cities, 2) * 100
-    # pairwise Euclidean distances
-    dist_matrix = np.sqrt(((coords[:, None, :] - coords[None, :, :]) ** 2).sum(axis=2))
+    diff = coords[:, None, :] - coords[None, :, :]
+    dist_matrix = np.sqrt((diff ** 2).sum(axis=2))
     return dist_matrix, coords
+
+
+def _run_combo(args):
+    """
+    Worker: run `runs` independent trials for one (alpha, beta, rho, n_ants) combo.
+    Returns a list of dicts (one dict per trial).
+    """
+    distance_matrix, alpha, beta, rho, n_ants, runs, n_iterations = args
+    out = []
+    for _ in range(runs):
+        aco = AntColonyOptimization(
+            distance_matrix=distance_matrix,
+            n_ants=n_ants,
+            n_iterations=n_iterations,
+            decay=rho,
+            alpha=alpha,
+            beta=beta
+        )
+        _, best_dist = aco.run()
+        out.append({
+            'alpha': alpha,
+            'beta': beta,
+            'rho': rho,
+            'n_ants': n_ants,
+            'best_dist': best_dist
+        })
+    return out
 
 
 def evaluate_aco_hyperparameters(
@@ -25,61 +52,129 @@ def evaluate_aco_hyperparameters(
     rhos,
     n_ants_list,
     runs=30,
-    n_iterations=100
+    n_iterations=100,
+    n_jobs=None
 ):
     """
-    Run ACO for each combination of hyperparameters multiple times.
-
-    Returns:
-        pd.DataFrame: columns [alpha, beta, rho, n_ants, avg_best_dist, std_best_dist]
+    Parallel evaluation: one task per hyperparameter combo (each does `runs` trials).
+    Returns a DataFrame with one row per trial.
     """
+    # 1) build one tuple-per-combo
+    combos = [
+        (distance_matrix, a, b, rho, ants, runs, n_iterations)
+        for a in alphas
+        for b in betas
+        for rho in rhos
+        for ants in n_ants_list
+    ]
+
     records = []
-    for alpha in alphas:
-        for beta in betas:
-            for rho in rhos:
-                for n_ants in n_ants_list:
-                    best_dists = []
-                    # multiple trials for statistics
-                    for _ in range(runs):
-                        aco = AntColonyOptimization(
-                            distance_matrix,
-                            n_ants=n_ants,
-                            n_iterations=n_iterations,
-                            decay=rho,
-                            alpha=alpha,
-                            beta=beta
-                        )
-                        _, best_dist = aco.run()
-                        best_dists.append(best_dist)
-                    records.append({
-                        'alpha': alpha,
-                        'beta': beta,
-                        'rho': rho,
-                        'n_ants': n_ants,
-                        'avg_best_dist': np.mean(best_dists),
-                        'std_best_dist': np.std(best_dists)
-                    })
-    return pd.DataFrame.from_records(records)
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        futures = [executor.submit(_run_combo, combo) for combo in combos]
+        for fut in tqdm(as_completed(futures),
+                        total=len(futures),
+                        desc="ACO combos"):
+            batch = fut.result()
+            # EXTEND, not append!
+            records.extend(batch)
+
+    df = pd.DataFrame(records)
+
+    # --- optional sanity check ---
+    # counts = df.groupby(['alpha','beta','rho','n_ants']).size()
+    # assert counts.min() == runs and counts.max() == runs, \
+    #        f"Expected {runs} trials per combo but got {counts.unique()}"
+    # --------------------------------
+
+    return df
 
 
 def plot_hyperparameter_effects(df):
     """
-    Plot the aggregated effect of each hyperparameter on the average best distance.
+    Plot mean ± std errorbars for each hyperparameter.
     """
     params = ['alpha', 'beta', 'rho', 'n_ants']
-    fig, axes = plt.subplots(1, len(params), figsize=(6 * len(params), 5), sharey=True)
-    for ax, param in zip(axes, params):
-        stats = df.groupby(param)['avg_best_dist'].agg(['mean', 'std']).reset_index()
-        ax.errorbar(
-            stats[param],
-            stats['mean'],
-            yerr=stats['std'],
-            marker='o',
-            linestyle='-'
-        )
-        ax.set_title(f'Effect of {param}')
-        ax.set_xlabel(param)
-        ax.set_ylabel('Avg Best Distance')
+    fig, axes = plt.subplots(1, len(params), figsize=(20, 5), sharey=True)
+
+    for ax, p in zip(axes, params):
+        grp = df.groupby(p)['best_dist']
+        x = grp.mean().index.astype(float)
+        y = grp.mean().values
+        yerr = grp.std().values
+
+        ax.errorbar(x, y, yerr=yerr, marker='o', linestyle='-')
+        ax.set_title(f'Effect of {p}')
+        ax.set_xlabel(p)
+        ax.set_ylabel('Best Distance')
         ax.grid(True)
+
     plt.tight_layout()
     plt.show()
+
+
+def print_parameter_rankings(df, top_k=5):
+    """
+    Print the top and bottom k hyperparameter settings by mean best_dist.
+    """
+    stats = (
+        df.groupby(['alpha','beta','rho','n_ants'])['best_dist']
+          .agg(mean='mean', std='std')
+          .reset_index()
+          .sort_values('mean')
+    )
+
+    print(f"\nTop {top_k} parameter combos:")
+    for _, row in stats.head(top_k).iterrows():
+        a, b, r, ants = row['alpha'], row['beta'], row['rho'], int(row['n_ants'])
+        m, s = row['mean'], row['std']
+        print(f" α={a}, β={b}, ρ={r}, ants={ants} -> mean={m:.2f}, std={s:.2f}")
+
+    print(f"\nWorst {top_k} parameter combos:")
+    for _, row in stats.tail(top_k).iterrows():
+        a, b, r, ants = row['alpha'], row['beta'], row['rho'], int(row['n_ants'])
+        m, s = row['mean'], row['std']
+        print(f" α={a}, β={b}, ρ={r}, ants={ants} -> mean={m:.2f}, std={s:.2f}")
+
+
+def analyze_convergence_behavior(df, top_k=5):
+    """
+    Identify the most unstable combos by coefficient of variation (std/mean).
+    """
+    cv = (
+        df.groupby(['alpha','beta','rho','n_ants'])['best_dist']
+          .agg(mean='mean', std='std')
+          .reset_index()
+    )
+    cv['cv'] = cv['std'] / cv['mean']
+    unstable = cv.sort_values('cv', ascending=False).head(top_k)
+
+    print(f"\nTop {top_k} most unstable combos (by CV):")
+    for _, row in unstable.iterrows():
+        a, b, r, ants = row['alpha'], row['beta'], row['rho'], int(row['n_ants'])
+        m, s, c = row['mean'], row['std'], row['cv']
+        print(f" α={a}, β={b}, ρ={r}, ants={ants} -> mean={m:.2f}, std={s:.2f}, cv={c:.3f}")
+
+
+def run_aco_experiment():
+    # 1) problem setup
+    dist_matrix, _ = create_distance_matrix(n_cities=20, seed=42)
+
+    # 2) hyperparameter grid
+    alphas      = [0.5, 1.0, 1.5, 2.0]
+    betas       = [1.0, 2.0, 3.0, 4.0]
+    rhos        = [0.1, 0.3, 0.5, 0.7]
+    n_ants_list = [10, 20, 30, 50]
+
+    # 3) evaluate
+    df = evaluate_aco_hyperparameters(
+        dist_matrix, alphas, betas, rhos, n_ants_list,
+        runs=30, n_iterations=100, n_jobs=None
+    )
+
+    # 4) print & analyze
+    print(df.groupby(['alpha','beta','rho','n_ants'])['best_dist'].agg(['size','mean','std']))
+    print_parameter_rankings(df)
+    analyze_convergence_behavior(df)
+
+    # 5) plot
+    plot_hyperparameter_effects(df)
