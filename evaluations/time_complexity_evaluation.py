@@ -98,6 +98,7 @@ class TimeComplexityEvaluator:
             for m, n in pairs
         ]
 
+        #run parallel
         results = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
             for res in tqdm(executor.map(_run_single, tasks),
