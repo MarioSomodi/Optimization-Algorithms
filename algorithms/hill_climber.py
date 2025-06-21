@@ -1,6 +1,4 @@
 """
-HillClimber
-
 1. Repeat max_iter times:
    • Pick a fresh random point in the bounds.
    • Perform step_size steps: 
@@ -10,7 +8,6 @@ HillClimber
 2. At the end, returns the best solution found and its score.
 3. Tracks timing and final scores per restart for plots.
 """
-
 import numpy as np
 import time
 
@@ -80,21 +77,15 @@ class HillClimber:
         self.total_time = time.perf_counter() - start_time
         return self.best_solution, self.best_eval
 
-    def summary(self):
+    def get_timing_data(self):
         """
         Return
-          • best_solution the best point found
-          • best_evaluation its score
           • total_time full run duration
           • avg_local_time average inner loop time per restart
           • avg_outer_time average full restart time
-          • history list of final scores per restart
         """
         return {
-            'best_solution': self.best_solution,
-            'best_evaluation': self.best_eval,
             'total_time': self.total_time,
             'avg_local_time': np.mean(self.local_times),
             'avg_outer_time': np.mean(self.outer_times),
-            'history': self.history
         }
