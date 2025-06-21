@@ -1,19 +1,16 @@
 """
-SimulatedAnnealing
-
 A metaheuristic optimizer that mimics annealing in metallurgy:
 • Starts at a high “temperature” allowing uphill moves to escape local minima.
 • Gradually cools according to a chosen schedule to focus on exploitation.
 • Tracks and returns the best solution found.
 
 Cooling Schedules :
-  • linear      : T(k) = T0 − α·k
+  • linear : T(k) = T0 − α·k
   • logarithmic : T(k) = T0 / log(k+1)
   • exponential : T(k) = T0 · β^k
-  • adaptive    : adjust cooling based on recent acceptance rate
-  • custom      : user-provided schedule function
+  • adaptive : adjust cooling based on recent acceptance rate
+  • custom : user-provided schedule function
 """
-
 import numpy as np
 import time
 
@@ -21,24 +18,24 @@ class SimulatedAnnealing:
     def __init__(
         self,
         objective,
-        initial_temp: float,
-        schedule: str = 'exponential',
-        schedule_params: dict = None,
-        step_size: float = 0.1,
-        max_iter: int = 1000
+        initial_temp,
+        schedule = 'exponential',
+        schedule_params = {'beta': 0.99},
+        step_size = 0.1,
+        max_iter = 1000
     ):
         """
-        objective        – an object with .bounds and .evaluate(x)
-        initial_temp     – starting temperature T0
-        schedule         – one of {'linear','log','exponential','adaptive','custom'}
-        schedule_params  – parameters for the chosen schedule:
-            • linear:      {'alpha': float}
+        objective – an object with .bounds and .evaluate(x)
+        initial_temp – starting temperature T0
+        schedule – one of {'linear','log','exponential','adaptive','custom'}
+        schedule_params – parameters for the chosen schedule:
+            • linear: {'alpha': float}
             • logarithmic: {} (no extra params)
             • exponential: {'beta': float in (0,1)}
-            • adaptive:    {'window': int, 'rate_target': float, 'alpha_fast': float, 'alpha_slow': float}
-            • custom:      {'func': callable(k, T_prev) -> T_k}
-        step_size        – standard deviation for Gaussian perturbation
-        max_iter         – total number of annealing steps
+            • adaptive: {'window': int, 'rate_target': float, 'alpha_fast': float, 'alpha_slow': float}
+            • custom: {'func': callable(k, T_prev) -> T_k}
+        step_size – standard deviation for Gaussian perturbation
+        max_iter – total number of annealing steps
         """
         self.obj = objective
         self.dim = len(objective.global_min)
@@ -48,7 +45,7 @@ class SimulatedAnnealing:
         self.step_size = step_size
         self.max_iter = max_iter
 
-        # State trackers
+        # placeholders for tracking results and timing
         self.best_solution = None
         self.best_eval = float('inf')
         self.current_solution = None
@@ -78,7 +75,7 @@ class SimulatedAnnealing:
             raise ValueError(f"Unknown schedule '{self.schedule}'")
 
     def _generate_neighbour(self, x):
-        """Generate a normal distribution neighbor clipped to bounds."""
+        """Generate a random neighbor from normal distribution clipped to bounds."""
         candidate = x + np.random.normal(0, self.step_size, self.dim)
         low, high = self.obj.bounds
         return np.clip(candidate, low, high)
@@ -110,7 +107,7 @@ class SimulatedAnnealing:
     def run(self):
         """Perform the simulated annealing search over max_iter steps."""
         start = time.perf_counter()
-        # Initialize with noise near global min
+        # Initialize with a random from the normal distribution
         self.current_solution = self._generate_neighbour(self.obj.global_min)
         self.current_eval = self.obj.evaluate(self.current_solution)
         self.best_solution = self.current_solution.copy()
@@ -125,7 +122,7 @@ class SimulatedAnnealing:
             neighbor = self._generate_neighbour(self.current_solution)
             neigh_eval = self.obj.evaluate(neighbor)
 
-            # Compute change in energy
+            # Calculate change in energy (delta)
             delta = neigh_eval - self.current_eval
 
             # Acceptance logic with overflow safety
@@ -150,28 +147,9 @@ class SimulatedAnnealing:
             else:
                 accepted = 0
 
-            # Logging
             self.history.append(self.current_eval)
             self.temps.append(temperature)
             self.accept_history.append(accepted)
 
         self.total_time = time.perf_counter() - start
         return self.best_solution, self.best_eval
-
-
-    def summary(self):
-        """
-        Returns:
-          best_solution  – best point found
-          best_evaluation– its objective value
-          total_time     – wall-clock duration
-          history        – list of accepted current_eval per iteration
-          temps          – temperature schedule over iterations
-        """
-        return {
-            'best_solution': self.best_solution,
-            'best_evaluation': self.best_eval,
-            'total_time': self.total_time,
-            'history': self.history,
-            'temps': self.temps
-        }
