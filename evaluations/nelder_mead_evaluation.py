@@ -57,7 +57,6 @@ def evaluate_nm_hyperparams():
     df_nm = pd.DataFrame(records_nm)
     print("Nelder–Mead Hyperparameter Results:")
     print(df_nm)
-    df_nm.to_csv('nelder_mead_hyperparam_results.csv', index=False)
 
     # Fixed parameters for heatmaps (rho=0.5, sigma=0.5)
     fixed = df_nm[(df_nm['rho'] == 0.5) & (df_nm['sigma'] == 0.5)]
