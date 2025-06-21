@@ -1,16 +1,23 @@
+"""
+A population-based metaheuristic inspired by real ants’ foraging:
+• A colony of “ants” builds solutions (tours) probabilistically, using both:
+    – Pheromone trails τ, which are learned and guide ants toward historically good edges.
+    – Heuristic desirability η (e.g. inverse distance) to favor shorter legs.
+• After each iteration, pheromone evaporates (decay ρ) to forget poor paths, then is deposited
+  in proportion to each ant’s tour quality (Δτ ∝ 1/length).
+• Over successive iterations, edges belonging to good tours accumulate more pheromone,
+  balancing exploration (pheromone evaporation + randomness) with exploitation (pheromone reinforcement).
+"""
 import numpy as np
 
 class AntColonyOptimization:
     """
-    Ant Colony Optimization for the Traveling Salesman Problem (TSP).
-
-    Args:
-        distance_matrix: 2D numpy array of pairwise distances between cities.
-        n_ants: Number of ants per iteration.
-        n_iterations: Number of colony iterations.
-        decay: Pheromone evaporation coefficient in [0,1]. (ρ)
-        alpha: Influence of pheromone on decision. (α)
-        beta: Influence of heuristic (inverse distance) on decision. (β)
+    distance_matrix: 2D numpy array of pairwise distances between cities.
+    n_ants: Number of ants per iteration.
+    n_iterations: Number of colony iterations.
+    decay: Pheromone evaporation coefficient in [0,1]. (ρ)
+    alpha: Influence of pheromone on decision. (α)
+    beta: Influence of heuristic (inverse distance) on decision. (β)
     """
     def __init__(
         self,
@@ -25,9 +32,9 @@ class AntColonyOptimization:
         self.num_cities = distance_matrix.shape[0]
         self.n_ants = n_ants
         self.n_iterations = n_iterations
-        self.decay = decay  # evaporation rate ρ
-        self.alpha = alpha  # pheromone importance α
-        self.beta = beta    # heuristic importance β
+        self.decay = decay
+        self.alpha = alpha
+        self.beta = beta
 
         # Initialize pheromone matrix τ_{ij} = 1
         # Formula: τ_{ij}(0) = 1
@@ -125,18 +132,3 @@ class AntColonyOptimization:
                 self.best_distance = curr_best
                 self.best_route = routes[np.argmin(dists)]
             self.history.append(self.best_distance)
-
-        return self.best_route, self.best_distance
-
-    def summary(self):
-        return {
-            'n_ants': self.n_ants,
-            'n_iterations': self.n_iterations,
-            'decay': self.decay,
-            'alpha': self.alpha,
-            'beta': self.beta,
-            'best_route': self.best_route,
-            'best_distance': self.best_distance,
-            'history': list(self.history),
-            'pheromone_matrix': self.pheromone.copy()
-        }
