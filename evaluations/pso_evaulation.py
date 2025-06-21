@@ -7,39 +7,8 @@ import os
 from algorithms.particle_swarm_optimization import ParticleSwarmOptimization
 from objective_functions.rastrigin import RastriginObjective
 
-
-def _run_single(args):
-    """
-    unpack args, run one PSO experiment, return metrics.
-    """
-    w, c1, c2, dim, n_particles, max_iter, tol = args
-    obj = RastriginObjective(dim)
-    pso = ParticleSwarmOptimization(
-        objective=obj,
-        n_particles=n_particles,
-        w=w,
-        c1=c1,
-        c2=c2,
-        max_iter=max_iter
-    )
-    pso.run()
-
-    best_eval = pso.gbest_score
-    total_time = pso.total_time
-    history = np.array(pso.history)
-
-    # iteration when best eval first <= tol
-    reached = np.where(history <= tol)[0]
-    iter_to_tol = int(reached[0]) if reached.size > 0 else max_iter
-
-    return w, c1, c2, best_eval, total_time, iter_to_tol, history
-
-
 class PsoEvaluator:
     """
-    Evaluate Particle Swarm Optimization across a grid of hyperparameters.
-
-    Attributes:
         c1_values: the list of cognitive coefficients to test
         c2_values: the list of social coefficients to test
         w_values: the list of inertia weights to test
@@ -52,7 +21,6 @@ class PsoEvaluator:
         results: filled after evaluate()
         df: pandas DataFrame view of results for easy analysis and plotting
     """
-
     def __init__(
         self,
         c1_values,
@@ -74,6 +42,33 @@ class PsoEvaluator:
         self.n_particles = n_particles
         self.results = {}
         self.df = None
+
+    @staticmethod
+    def _run_single(args):
+        """
+        unpack args, run one PSO experiment, return metrics.
+        """
+        w, c1, c2, dim, n_particles, max_iter, tol = args
+        obj = RastriginObjective(dim)
+        pso = ParticleSwarmOptimization(
+            objective=obj,
+            n_particles=n_particles,
+            w=w,
+            c1=c1,
+            c2=c2,
+            max_iter=max_iter
+        )
+        pso.run()
+
+        best_eval = pso.gbest_score
+        total_time = pso.total_time
+        history = np.array(pso.history)
+
+        # iteration when best eval first <= tol
+        reached = np.where(history <= tol)[0]
+        iter_to_tol = int(reached[0]) if reached.size > 0 else max_iter
+
+        return w, c1, c2, best_eval, total_time, iter_to_tol, history
 
     def evaluate(self):
         """
@@ -98,7 +93,7 @@ class PsoEvaluator:
         total_runs = len(tasks)
         results_list = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            for out in tqdm(executor.map(_run_single, tasks),
+            for out in tqdm(executor.map(self._run_single, tasks),
                             total=total_runs,
                             desc="Evaluating"):
                 results_list.append(out)
@@ -183,31 +178,53 @@ class PsoEvaluator:
         plt.show()
 
     def top_bottom(self, n=5):
-        """
-        Return the keys for the top n (lowest score) and worst n (highest score) combos.
-        """
-        sorted_df = self.df.sort_values('avg_global_best_score')
-        top = sorted_df.head(n)['key'].tolist()
-        bottom = sorted_df.tail(n)['key'].tolist()
-        return top, bottom
+        if self.df is None:
+            raise RuntimeError("No data: run .evaluate() first.")
+
+        sorted_best = self.df.sort_values(
+            ['avg_global_best_score', 'avg_iter_to_tol', 'avg_total_time'],
+            ascending=[True, True, True]
+        )
+        top_keys = sorted_best['key'].head(n).tolist()
+
+        sorted_worst = self.df.sort_values(
+            ['avg_global_best_score', 'avg_iter_to_tol', 'avg_total_time'],
+            ascending=[False, False, False]
+        )
+        worst_keys = sorted_worst['key'].head(n).tolist()
+
+        return top_keys, worst_keys
+
 
     def plot_top_bottom(self, n=5):
         """
-        Plot convergence curves for the best n and worst n parameter combos on one plot.
+        Overlay the average convergence curves of the top-n and worst-n
+        hyperparameter combos on a single graph.
         """
         if self.df is None:
-            raise RuntimeError("No data to plot. Call .evaluate() first.")
-        top, bottom = self.top_bottom(n)
-        plt.figure(figsize=(8, 6))
-        for key in top:
-            plt.plot(self.results[key]['avg_history'], label=f"Top: {key}")
-        for key in bottom:
-            plt.plot(self.results[key]['avg_history'], linestyle='--', label=f"Worst: {key}")
+            raise RuntimeError("No data: run .evaluate() first.")
+
+        top_keys, worst_keys = self.top_bottom(n)
+
+        plt.figure(figsize=(8, 5))
+        # plot best n
+        for key in top_keys:
+            meta = self.results[key]
+            label = f"BEST {key} (score={meta['avg_global_best_score']:.3g})"
+            plt.plot(meta['avg_history'], label=label, linewidth=1.5)
+
+        # plot worst n
+        for key in worst_keys:
+            meta = self.results[key]
+            label = f"WORST {key} (score={meta['avg_global_best_score']:.3g})"
+            plt.plot(meta['avg_history'], linestyle='--', label=label, linewidth=1.5)
+
         plt.title(f"Top {n} vs Worst {n} PSO Convergence")
-        plt.xlabel('Iteration')
-        plt.ylabel('Best-so-far Eval')
-        plt.legend(fontsize='small')
+        plt.xlabel("Iteration")
+        plt.ylabel("Best‐so‐far Evaluation")
+        plt.legend(fontsize='small', ncol=2)
         plt.grid(True, linestyle='--', alpha=0.5)
+        plt.tight_layout()
         plt.show()
 
     def plot_best_vs_worst(self):
@@ -260,3 +277,4 @@ class PsoEvaluator:
         plt.grid(True, linestyle='--', alpha=0.5)
         plt.tight_layout()
         plt.show()
+

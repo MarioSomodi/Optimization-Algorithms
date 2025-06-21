@@ -12,13 +12,13 @@ import numpy as np
 import time
 
 class HillClimber:
+    """
+    objective function object with .bounds (low,high) and .evaluate(x) methods
+    step_size standard deviation of normal distribution values
+    max_iter how many restarts to run
+    local_search_iter how many steps per local search
+    """
     def __init__(self, objective, step_size=0.1, max_iter=1000, local_search_iter=500):
-        """
-        objective function object with .bounds (low,high) and .evaluate(x) methods
-        step_size standard deviation of normal distribution values
-        max_iter how many restarts to run
-        local_search_iter how many steps per local search
-        """
         self.obj = objective
         self.dim = len(objective.global_min)
         self.step_size = step_size

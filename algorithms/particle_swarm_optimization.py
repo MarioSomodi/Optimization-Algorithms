@@ -1,19 +1,19 @@
-import numpy as np
-import time
 """
 population-based stochastic optimization technique inspired by the social behavior of birds and fish:
 - A swarm of particles explores the solution space, each with position and velocity.
 - This balance between c1 and c2 drives exploration and exploitation without gradient information.
 """
+import numpy as np
+import time
+
 class ParticleSwarmOptimization:
     """
-    Args:
-        objective: object with .bounds (tuple of (low, high)) and .evaluate(x) method.
-        n_particles: number of particles in the swarm.
-        w: inertia weight controls speed (distance).
-        c1: cognitive coefficient (pull towards particle's own personal best).
-        c2: social coefficient (pull towards global best (swarm best)).
-        max_iter: number of iterations to run.
+    objective: object with .bounds (tuple of (low, high)) and .evaluate(x) method.
+    n_particles: number of particles in the swarm.
+    w: inertia weight controls speed (distance).
+    c1: cognitive coefficient (pull towards particle's own personal best).
+    c2: social coefficient (pull towards global best (swarm best)).
+    max_iter: number of iterations to run.
     """
     def __init__(
         self,

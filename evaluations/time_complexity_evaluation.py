@@ -5,29 +5,6 @@ from matplotlib import pyplot as plt
 from tqdm.auto import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
-def _run_single(args):
-    """
-    unpack args, run one timing experiment, return raw stats.
-    """
-    algo, objective_class, config, dim, step_size, m, n = args
-    obj = objective_class(dim=dim)
-    optimizer = algo(
-        objective=obj,
-        step_size=step_size,
-        max_iter=m,
-        local_search_iter=n,
-        **config
-    )
-    optimizer.run()
-    stats = optimizer.get_timing_data()
-    return {
-        'm': m,
-        'n': n,
-        'total_time': stats['total_time'],
-        'avg_outer_time': stats['avg_outer_time'],
-        'avg_local_time': stats['avg_local_time']
-    }
-
 class TimeComplexityEvaluator:
     """
     Measures how an algorithm's runtime scales with the total number of function evaluations.
@@ -71,6 +48,30 @@ class TimeComplexityEvaluator:
         self.raw_data = {}
         self.df: pd.DataFrame = pd.DataFrame()
 
+    @staticmethod
+    def _run_single(args):
+        """
+        unpack args, run one timing experiment, return raw stats.
+        """
+        algo, objective_class, config, dim, step_size, m, n = args
+        obj = objective_class(dim=dim)
+        optimizer = algo(
+            objective=obj,
+            step_size=step_size,
+            max_iter=m,
+            local_search_iter=n,
+            **config
+        )
+        optimizer.run()
+        stats = optimizer.get_timing_data()
+        return {
+            'm': m,
+            'n': n,
+            'total_time': stats['total_time'],
+            'avg_outer_time': stats['avg_outer_time'],
+            'avg_local_time': stats['avg_local_time']
+        }
+
     def evaluate(self):
         """
         Run all experiments in parallel and store:
@@ -101,7 +102,7 @@ class TimeComplexityEvaluator:
         #run parallel
         results = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            for res in tqdm(executor.map(_run_single, tasks),
+            for res in tqdm(executor.map(self._run_single, tasks),
                             total=len(tasks),
                             desc="Evaluating"):
                 results.append(res)

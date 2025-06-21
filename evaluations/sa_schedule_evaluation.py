@@ -6,36 +6,6 @@ from tqdm.auto import tqdm
 from algorithms.simulated_annealing import SimulatedAnnealing
 from objective_functions.rastrigin import RastriginObjective
 
-def _run_single(args):
-    """
-    unpack args, run one SA evaluation, return metrics.
-    """
-    schedule, params, dim, init_temp, step_size, max_iter, tol = args
-    obj = RastriginObjective(dim=dim)
-    sa = SimulatedAnnealing(
-        objective=obj,
-        initial_temp=init_temp,
-        schedule=schedule,
-        schedule_params=params,
-        step_size=step_size,
-        max_iter=max_iter
-    )
-    sa.run()
-
-    # best evaluation
-    best_val = sa.best_eval
-    # iterations to reach tolerance
-    for i, val in enumerate(sa.history):
-        if val <= tol:
-            iters_to_tol = i
-            break
-    else:
-        iters_to_tol = max_iter
-    # acceptance history
-    accept_history = sa.accept_history
-
-    return schedule, best_val, iters_to_tol, accept_history
-
 class SimulatedAnnealingCoolingSchedulesEvaluator:
     """
     run and compare different SA cooling schedules on the Rastrigin objective function
@@ -107,6 +77,37 @@ class SimulatedAnnealingCoolingSchedulesEvaluator:
         # placeholder for evaluation results
         self.results = {}
 
+    @staticmethod
+    def _run_single(args):
+        """
+        unpack args, run one SA evaluation, return metrics.
+        """
+        schedule, params, dim, init_temp, step_size, max_iter, tol = args
+        obj = RastriginObjective(dim=dim)
+        sa = SimulatedAnnealing(
+            objective=obj,
+            initial_temp=init_temp,
+            schedule=schedule,
+            schedule_params=params,
+            step_size=step_size,
+            max_iter=max_iter
+        )
+        sa.run()
+
+        # best evaluation
+        best_val = sa.best_eval
+        # iterations to reach tolerance
+        for i, val in enumerate(sa.history):
+            if val <= tol:
+                iters_to_tol = i
+                break
+        else:
+            iters_to_tol = max_iter
+        # acceptance history
+        accept_history = sa.accept_history
+
+        return schedule, best_val, iters_to_tol, accept_history
+
     def evaluate(self):
         """
         Execute the evaluation for each cooling schedule.
@@ -128,7 +129,7 @@ class SimulatedAnnealingCoolingSchedulesEvaluator:
         # parallel run
         results = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            for out in tqdm(executor.map(_run_single, tasks),
+            for out in tqdm(executor.map(self._run_single, tasks),
                             total=len(tasks),
                             desc="Evaluating"):
                 results.append(out)

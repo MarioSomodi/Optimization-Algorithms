@@ -15,6 +15,19 @@ import numpy as np
 import time
 
 class SimulatedAnnealing:
+    """
+    objective – an object with .bounds and .evaluate(x)
+    initial_temp – starting temperature T0
+    schedule – one of {'linear','log','exponential','adaptive','custom'}
+    schedule_params – parameters for the chosen schedule:
+        • linear: {'alpha': float}
+        • logarithmic: {} (no extra params)
+        • exponential: {'beta': float in (0,1)}
+        • adaptive: {'window': int, 'rate_target': float, 'alpha_fast': float, 'alpha_slow': float}
+        • custom: {'func': callable(k, T_prev) -> T_k}
+    step_size – standard deviation for Gaussian perturbation
+    max_iter – total number of annealing steps
+    """
     def __init__(
         self,
         objective,
@@ -24,19 +37,6 @@ class SimulatedAnnealing:
         step_size = 0.1,
         max_iter = 1000
     ):
-        """
-        objective – an object with .bounds and .evaluate(x)
-        initial_temp – starting temperature T0
-        schedule – one of {'linear','log','exponential','adaptive','custom'}
-        schedule_params – parameters for the chosen schedule:
-            • linear: {'alpha': float}
-            • logarithmic: {} (no extra params)
-            • exponential: {'beta': float in (0,1)}
-            • adaptive: {'window': int, 'rate_target': float, 'alpha_fast': float, 'alpha_slow': float}
-            • custom: {'func': callable(k, T_prev) -> T_k}
-        step_size – standard deviation for Gaussian perturbation
-        max_iter – total number of annealing steps
-        """
         self.obj = objective
         self.dim = len(objective.global_min)
         self.T0 = initial_temp
