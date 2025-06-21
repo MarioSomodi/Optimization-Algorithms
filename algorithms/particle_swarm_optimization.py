@@ -1,15 +1,18 @@
 import numpy as np
 import time
-
+"""
+population-based stochastic optimization technique inspired by the social behavior of birds and fish:
+- A swarm of particles explores the solution space, each with position and velocity.
+- This balance between c1 and c2 drives exploration and exploitation without gradient information.
+"""
 class ParticleSwarmOptimization:
     """
-    Particle Swarm Optimization (PSO) algorithm.
     Args:
         objective: object with .bounds (tuple of (low, high)) and .evaluate(x) method.
         n_particles: number of particles in the swarm.
         w: inertia weight controls speed (distance).
-        c1: cognitive coefficient (particle's own best influence).
-        c2: social coefficient (global best influence).
+        c1: cognitive coefficient (pull towards particle's own personal best).
+        c2: social coefficient (pull towards global best (swarm best)).
         max_iter: number of iterations to run.
     """
     def __init__(
@@ -101,20 +104,3 @@ class ParticleSwarmOptimization:
             self.history.append(self.gbest_score)
 
         self.total_time = time.perf_counter() - start_time
-        return self.gbest_position, self.gbest_score
-
-    def summary(self):
-        """
-        Returns a summary of the optimization run.
-        Keys:
-            best_solution: best position found.
-            best_evaluation: objective value at best_solution.
-            history: list of the best global scores per iteration.
-            total_time: duration of the run (seconds).
-        """
-        return {
-            'best_solution': self.gbest_position,
-            'best_evaluation': self.gbest_score,
-            'history': self.history,
-            'total_time': self.total_time
-        }
