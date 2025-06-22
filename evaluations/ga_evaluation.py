@@ -1,110 +1,216 @@
+from itertools import product
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
+from tqdm.auto import tqdm
 from algorithms.genetic_optimization import GeneticAlgorithm
 from objective_functions.rastrigin import RastriginObjective
 
-# --- Hyperparameter grids ---
-pop_sizes = [50, 100, 200]
-crossover_methods = ['single_point', 'two_point', 'uniform']
-mutation_rates = [0.01, 0.05, 0.1]
-selection_methods = ['tournament', 'roulette']
 
-# Fixed GA settings for Rastrigin (10D)
-dim = 10
-max_generations = 200
-crossover_rate = 0.9
-mutation_scale = 0.1
-
-# Threshold for poor convergence analysis
-DEFAULT_THRESHOLD = 0.1
-
-
-def evaluate_ga(pop_size, crossover_method, mutation_rate, selection_method):
+class GaEvaluator:
     """
-    Run a single GA instance on the Rastrigin function and return
-    (best_fitness, generation_of_best).
+        pop_sizes           – list of population sizes to test
+        crossover_methods   – list of crossover operators to test
+        mutation_rates      – list of per-gene mutation probabilities
+        selection_methods   – list of selection methods ('tournament'/'roulette')
+        dim                 – problem dimensionality (fixed = 10)
+        max_generations     – GA generations per run
+        crossover_rate      – probability of crossover each pairing
+        mutation_scale      – σ for Gaussian mutation
+        runs                – number of independent runs per combo
+        threshold           – fitness threshold for “poor” runs
+        results             – dict mapping combo_key → metrics + avg_history
+        df                  – DataFrame of scalar metrics (one row per combo)
     """
-    obj = RastriginObjective(dim=dim)
-    fitness_fn = lambda x: 1.0 / (1.0 + obj.evaluate(x))
 
-    ga = GeneticAlgorithm(
-        pop_size=pop_size,
-        gene_length=dim,
-        fitness_fn=fitness_fn,
-        representation='real',
-        bounds=obj.bounds,
-        max_generations=max_generations,
-        crossover_rate=crossover_rate,
-        mutation_rate=mutation_rate,
-        selection_method=selection_method,
-        tournament_size=3,
-        crossover_method=crossover_method,
-        mutation_method='gaussian',
-        mutation_scale=mutation_scale
-    )
+    def __init__(
+        self,
+        pop_sizes,
+        crossover_methods,
+        mutation_rates,
+        selection_methods,
+        runs=30,
+        dim=10,
+        max_generations=200,
+        crossover_rate=0.9,
+        mutation_scale=0.1,
+        threshold=0.1
+    ):
+        self.pop_sizes = pop_sizes
+        self.crossover_methods = crossover_methods
+        self.mutation_rates = mutation_rates
+        self.selection_methods = selection_methods
+        self.runs = runs
+        # Fixed GA/Rastrigin settings
+        self.dim = dim
+        self.max_generations = max_generations
+        self.crossover_rate = crossover_rate
+        self.mutation_scale = mutation_scale
 
-    best_fit = -np.inf
-    gen_of_best = 0
+        # Flag runs whose final fitness < threshold
+        self.threshold = threshold
 
-    for generation in range(1, max_generations + 1):
-        fits = ga.evaluate_population()
-        idx = np.argmax(fits)
-        if fits[idx] > best_fit:
-            best_fit = fits[idx]
-            gen_of_best = generation
-        # advance population
-        new_pop = []
-        while len(new_pop) < pop_size:
-            p1 = ga.select_parent(fits)
-            p2 = ga.select_parent(fits)
-            c1, c2 = ga.crossover(p1, p2)
-            new_pop.append(ga.mutate(c1))
-            if len(new_pop) < pop_size:
-                new_pop.append(ga.mutate(c2))
-        ga.population = np.array(new_pop)
+        # To be filled after evaluate()
+        self.results = {}
+        self.df = None
 
-    return best_fit, gen_of_best
+    def _combo_key(self, pop, cross, mut, sel):
+        return f"p{pop}_x{cross[:2]}_m{mut}_s{sel[:2]}"
 
+    def evaluate(self):
+        records = []
+        combos = list(product(
+            self.pop_sizes,
+            self.crossover_methods,
+            self.mutation_rates,
+            self.selection_methods
+        ))
 
-def run_hyperparameter_experiments(
-    pop_sizes=pop_sizes,
-    crossover_methods=crossover_methods,
-    mutation_rates=mutation_rates,
-    selection_methods=selection_methods,
-    threshold=DEFAULT_THRESHOLD,
-):
-    """
-    Runs GA experiments over all combinations of hyperparameters,
-    returns a DataFrame of results and a DataFrame of poor-convergence cases.
+        for pop, cross, mut, sel in tqdm(combos, desc="GA Hyperparam combos"):
+            best_fits = []
+            gen_of_bests = []
+            histories = []
 
-    Args:
-        pop_sizes: list of population sizes
-        crossover_methods: list of crossover types
-        mutation_rates: list of mutation rates
-        selection_methods: list of selection methods
-        threshold: fitness threshold to flag poor convergence
-        save_csv: whether to save results to CSV
-        csv_path: path for CSV output
+            for _ in range(self.runs):
+                # build a fresh GA
+                obj = RastriginObjective(dim=self.dim)
+                fitness_fn = lambda x: 1.0 / (1.0 + obj.evaluate(x))
 
-    Returns:
-        df_results (pd.DataFrame), df_poor (pd.DataFrame)
-    """
-    records = []
-    for pop in pop_sizes:
-        for cross in crossover_methods:
-            for mut in mutation_rates:
-                for sel in selection_methods:
-                    best_fit, gen_best = evaluate_ga(pop, cross, mut, sel)
-                    records.append({
-                        'pop_size': pop,
-                        'crossover': cross,
-                        'mutation_rate': mut,
-                        'selection': sel,
-                        'best_fitness': best_fit,
-                        'gen_of_best': gen_best
-                    })
+                ga = GeneticAlgorithm(
+                    pop_size=pop,
+                    gene_length=self.dim,
+                    fitness_fn=fitness_fn,
+                    representation='real',
+                    bounds=obj.bounds,
+                    max_generations=self.max_generations,
+                    crossover_rate=self.crossover_rate,
+                    mutation_rate=mut,
+                    selection_method=sel,
+                    tournament_size=3,
+                    crossover_method=cross,
+                    mutation_method='gaussian',
+                    mutation_scale=self.mutation_scale
+                )
 
-    df_results = pd.DataFrame(records)
+                _, best_fit = ga.run()
+                best_fits.append(best_fit)
 
-    df_poor = df_results[df_results['best_fitness'] < threshold]
-    return df_results, df_poor
+                # generation of first attainment of best_fit
+                gen_best = next(
+                    (i+1 for i,v in enumerate(ga.history) if np.isclose(v, best_fit)),
+                    self.max_generations
+                )
+                gen_of_bests.append(gen_best)
+                histories.append(ga.history)
+
+            # aggregate
+            avg_fit = np.mean(best_fits)
+            avg_gen = np.mean(gen_of_bests)
+            avg_hist = np.mean(histories, axis=0)
+
+            key = self._combo_key(pop, cross, mut, sel)
+            self.results[key] = {
+                'pop_size': pop,
+                'crossover': cross,
+                'mutation_rate': mut,
+                'selection': sel,
+                'avg_best_fitness': avg_fit,
+                'avg_gen_of_best': avg_gen,
+                'avg_history': avg_hist
+            }
+
+            records.append({
+                'key': key,
+                'pop_size': pop,
+                'crossover': cross,
+                'mutation_rate': mut,
+                'selection': sel,
+                'avg_best_fitness': avg_fit,
+                'avg_gen_of_best': avg_gen
+            })
+
+        self.df = pd.DataFrame(records)
+        return self.df, self.results
+
+    def plot_hyperparameter_effects(self):
+        """
+        For each hyperparameter, plot mean ± std of final best fitness.
+        """
+        if self.df is None:
+            raise RuntimeError("Call evaluate() first.")
+
+        params = ['pop_size', 'mutation_rate', 'selection', 'crossover']
+        fig, axes = plt.subplots(1, len(params), figsize=(20,5), sharey=True)
+
+        for ax, p in zip(axes, params):
+            grp = self.df.groupby(p)['avg_best_fitness']
+            x = grp.mean().index
+            y = grp.mean().values
+            yerr = grp.std().values
+            ax.errorbar(x, y, yerr=yerr, marker='o', linestyle='-')
+            ax.set_title(f"Effect of {p}")
+            ax.set_xlabel(p)
+            ax.set_ylabel("Avg Best Fitness")
+            ax.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    def plot_best_vs_worst(self):
+        """
+        Overlay convergence (avg_history) of the single best vs worst combos,
+        chosen by avg_best_fitness ↑, then avg_gen_of_best ↓ as tie-breaker.
+        """
+        if self.df is None:
+            raise RuntimeError("Call evaluate() first.")
+
+        # best = max fitness, worst = min fitness
+        sorted_df = self.df.sort_values(
+            ['avg_best_fitness', 'avg_gen_of_best'],
+            ascending=[False, True]
+        )
+        best = sorted_df.iloc[0]
+        worst = sorted_df.iloc[-1]
+
+        b = self.results[best['key']]
+        w = self.results[worst['key']]
+
+        plt.figure(figsize=(8,5))
+        plt.plot(b['avg_history'],  label=f"BEST ({best['key']})", linewidth=2)
+        plt.plot(w['avg_history'], '--', label=f"WORST ({worst['key']})", linewidth=2)
+        plt.title("GA Convergence: Best vs. Worst Hyperparameters")
+        plt.xlabel("Generation")
+        plt.ylabel("Avg Best Fitness")
+        plt.legend()
+        plt.grid(True, linestyle='--', alpha=0.5)
+        plt.tight_layout()
+        plt.show()
+
+    def plot_top_bottom(self, n=5):
+        """
+        Overlay the top-n and bottom-n convergence curves in one figure.
+        """
+        if self.df is None:
+            raise RuntimeError("Call evaluate() first.")
+
+        # sort by fitness then gen_of_best
+        sorted_df = self.df.sort_values(
+            ['avg_best_fitness', 'avg_gen_of_best'],
+            ascending=[False, True]
+        )
+        top_keys   = sorted_df['key'].head(n)
+        bottom_keys= sorted_df['key'].tail(n)
+
+        plt.figure(figsize=(8,5))
+        for k in top_keys:
+            plt.plot(self.results[k]['avg_history'],
+                     label=f"TOP {k}", linewidth=1.5)
+        for k in bottom_keys:
+            plt.plot(self.results[k]['avg_history'],
+                     '--', label=f"BOTTOM {k}", linewidth=1.5)
+        plt.title(f"Top {n} vs Bottom {n} GA Convergence")
+        plt.xlabel("Generation")
+        plt.ylabel("Avg Best Fitness")
+        plt.legend(fontsize='small', ncol=2)
+        plt.grid(True, linestyle='--', alpha=0.5)
+        plt.tight_layout()
+        plt.show()
