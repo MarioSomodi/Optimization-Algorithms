@@ -8,8 +8,6 @@ from concurrent.futures import ProcessPoolExecutor
 class TimeComplexityEvaluator:
     """
     Measures how an algorithm's runtime scales with the total number of function evaluations.
-
-    Attributes:
         algo: Optimizer class to instantiate.
         objective_class: Objective function class to instantiate.
         config: Extra config passed to the optimizer.
@@ -74,7 +72,7 @@ class TimeComplexityEvaluator:
 
     def evaluate(self):
         """
-        Run all experiments in parallel and store:
+        Run all evaluations in parallel and store:
           - raw_data: dict of lists
           - df: pandas.DataFrame
         """

@@ -1,6 +1,7 @@
 import pygad
 import warnings
-
+import numpy as np
+from objective_functions.rastrigin import RastriginObjective
 
 class KnapsackPyGAD:
     def __init__(self, values, weights, capacity, sol_per_pop=50, num_generations=100):
@@ -62,12 +63,6 @@ class KnapsackPyGAD:
         )
         self.ga.plot_fitness()
         return solution, solution_fitness
-
-from pygad import pygad
-import numpy as np
-
-from objective_functions.rastrigin import RastriginObjective
-
 
 class RastriginPyGAD:
     def __init__(self, num_generations=200, sol_per_pop=100, dimensions=10):
