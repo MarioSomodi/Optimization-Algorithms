@@ -6,7 +6,7 @@ from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from algorithms.ant_colony_optimization import AntColonyOptimization
 
-class ACOEvaluator:
+class AcoEvaluator:
     """
         distance_matrix – symmetric matrix of pairwise distances between cities
         alphas – list of pheromone influence exponents to test (α)
