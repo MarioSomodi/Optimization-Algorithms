@@ -49,7 +49,7 @@ class AcoEvaluator:
         return dist_matrix, coords
 
     @staticmethod
-    def _run_combo(args):
+    def _run_single(args):
         """
         unpack args, run one ACO experiment, return metrics.
         """
@@ -88,7 +88,7 @@ class AcoEvaluator:
 
         records = []
         with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            futures = [executor.submit(self._run_combo, combo) for combo in combos]
+            futures = [executor.submit(self._run_single, combo) for combo in combos]
             for fut in tqdm(as_completed(futures),
                             total=len(futures),
                             desc="Evaluating"):
