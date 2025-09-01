@@ -76,6 +76,7 @@ class GradientDescent:
         # 2) if 2-D, show path
         start = self.x_history[0]
         if start.size == 2:
+
             ax2 = fig.add_subplot(1, 2, 2)
             xs = [p[0] for p in self.x_history]
             ys = [p[1] for p in self.x_history]
